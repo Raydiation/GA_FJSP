@@ -38,7 +38,15 @@ class GA_FJSP:
         self.population_num = pop_num
         self.gen_child_num = child_num
 
+    def clear(self):
+        self.all_op_options = []
+        self.populations = []
+
+        self.job_num = 0
+        self.machine_num = 0
+
     def load_instance(self, filename):
+        self.clear()
         self.all_op_options, self.job_num, self.machine_num = load_instance(filename)
 
     def initial_population(self):
@@ -50,7 +58,7 @@ class GA_FJSP:
     def gen(self):
 
         index = np.array([i for i in range(self.population_num)])
-        prob = np.array([gene.fit_value for gene in self.populations])
+        prob = np.array([1 / gene.fit_value for gene in self.populations])
         prob = prob / sum(prob)
 
         children = []
@@ -73,7 +81,10 @@ class GA_FJSP:
 
         # selection
 
-        self.populations.extend(children)
+        # self.populations.extend(children)
+        children.append(self.populations[0])
+        self.populations = children 
+
         self.populations.sort(key=functools.cmp_to_key(cmp))
         del self.populations[self.population_num:]
 
@@ -170,13 +181,26 @@ class GA_FJSP:
 
 
 def main():
+    population_num = 100
+    child_num = 200
     generation_num = 100
-    env = GA_FJSP(10, 20)
-    env.load_instance('./datasets/FJSP/Brandimarte_Data/Mk01.fjs')
-    env.initial_population()
-    for _ in range(generation_num):
-        env.gen()
-        print([gene.fit_value for gene in env.populations])
+    env = GA_FJSP(population_num, child_num)
+
+    with open('test.txt', 'a') as out:
+        out.write('population_num : {} \t child_num : {}\t generation_num : {}\n'.format(population_num, child_num, generation_num))
+
+    # file_dir = './datasets/FJSP/Brandimarte_Data'
+    file_dir = './datasets/FJSP/Hurink_Data/Text/vdata'
+
+    for ins in os.listdir(file_dir):
+        env.load_instance(os.path.join(file_dir, ins))
+        env.initial_population()
+        for _ in range(generation_num):
+            env.gen()
+            print('{} \t currently best {}'.format(ins, env.populations[0].fit_value))
+            print([gene.fit_value for gene in env.populations])
+        with open('test.txt', 'a') as out:
+            out.write('{} \t currently best {}\n'.format(ins, env.populations[0].fit_value))
 
 
 if __name__ == '__main__':
