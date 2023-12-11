@@ -27,9 +27,12 @@ class GENE:
         self.max_load_machine = -1
 
 class GA_FJSP:
-    def __init__(self, pop_num, child_num):
+    def __init__(self, args, pop_num, child_num):
+        self.args = args
         self.all_op_options = []
         self.populations = []
+        self.tabu_history = []
+        self.tabu_num = args.tabu_num
 
         self.job_num = 0
         self.machine_num = 0
@@ -54,6 +57,7 @@ class GA_FJSP:
             random_gene = GENE(random_init(self.all_op_options, self.job_num))
             self.fitness_evaluation(random_gene)
             self.populations.append(random_gene)
+            self.tabu_history.append(self.encode(random_gene))
 
     def gen(self):
 
@@ -64,20 +68,30 @@ class GA_FJSP:
         children = []
 
         # for _ in range(self.gen_child_num):
-        for _ in range(self.gen_child_num):
+        while len(children) < self.gen_child_num:
             choice = np.random.choice(index, size=2, replace=False, p=prob)
 
             child1, child2 = self.crossover(self.populations[choice[0]], self.populations[choice[1]])
-            self.fitness_evaluation(child1)
-            self.fitness_evaluation(child2)
 
-            self.mutation(child1)
-            self.mutation(child2)
+            if random.random() < self.args.mutation_rate:
+                self.fitness_evaluation(child1)
+                self.mutation(child1)
+            if random.random() < self.args.mutation_rate:
+                self.fitness_evaluation(child2)
+                self.mutation(child2)
 
-            self.fitness_evaluation(child1)
-            self.fitness_evaluation(child2)
-            children.append(child1)
-            children.append(child2)
+            encode1 = self.encode(child1)
+            encode2 = self.encode(child2)
+
+            if encode1 not in self.tabu_history:
+                self.tabu_history.append(encode1)
+                self.fitness_evaluation(child1)
+                children.append(child1)
+
+            if encode2 not in self.tabu_history:
+                self.tabu_history.append(encode2)
+                self.fitness_evaluation(child2)
+                children.append(child2)
 
         # selection
 
@@ -87,6 +101,7 @@ class GA_FJSP:
 
         self.populations.sort(key=functools.cmp_to_key(cmp))
         del self.populations[self.population_num:]
+        del self.tabu_history[:max(0, len(self.tabu_history) - self.tabu_num)]
 
     def fitness_evaluation(self, gene):
         # make sure the process satisfy the job precedent constrain
@@ -104,18 +119,18 @@ class GA_FJSP:
             gene.op_finish_time.append(job_current_loading[p[0]])
             
             # for check
-            if job_current_op[p[0]] != p[1]:
-                print("Wrong order")
+            # if job_current_op[p[0]] != p[1]:
+            #     print("Wrong order")
             
-            if self.all_op_options[p[0]][p[1]][p[2]] <= 0:
-                print("Wrong assignment")
+            # if self.all_op_options[p[0]][p[1]][p[2]] <= 0:
+            #     print("Wrong assignment")
             
             job_current_op[p[0]] += 1
         
         gene.fit_value = np.max(machine_current_loading)
         gene.max_load_machine = np.argmax(machine_current_loading)
         return np.max(machine_current_loading)
-        
+
     def crossover(self, gene1, gene2):
         cross_point = random.randint(1, len(gene1.gene) - 1)
         child1, child2 = GENE([]), GENE([])
@@ -127,10 +142,10 @@ class GA_FJSP:
             child1.gene.append(gene1.gene[i])
             child2.gene.append(gene2.gene[i])
             # check
-            if job_current_op_1[gene1.gene[i][0]] != gene1.gene[i][1]:
-                print("wrong")
-            if job_current_op_2[gene2.gene[i][0]] != gene2.gene[i][1]:
-                print("wrong")
+            # if job_current_op_1[gene1.gene[i][0]] != gene1.gene[i][1]:
+            #     print("wrong")
+            # if job_current_op_2[gene2.gene[i][0]] != gene2.gene[i][1]:
+            #     print("wrong")
             job_current_op_1[gene1.gene[i][0]] += 1
             job_current_op_2[gene2.gene[i][0]] += 1
 
@@ -164,43 +179,56 @@ class GA_FJSP:
         new_ch = (gene.gene[critical_path[rng]][0], gene.gene[critical_path[rng]][1], new_machine) # an new chromosome
         gene.gene.pop(critical_path[rng])
         if new_ch[1] == 0: # op 0 of job_(new_ch[0])
-            gene.gene.insert(0, new_ch)
+            # gene.gene.insert(0, new_ch)
+            gene.gene.insert(random.randint(0, critical_path[rng]), new_ch)
         else:
             for i in range(len(gene.gene) - 1, -1, -1):
                 if gene.gene[i][0] == new_ch[0] and gene.gene[i][1] == new_ch[1] - 1:
                     # insert at i + 1
-                    gene.gene.insert(i + 1, new_ch)
+                    # gene.gene.insert(i + 1, new_ch)
+                    gene.gene.insert(random.randint(i + 1, critical_path[rng]), new_ch)
                     break
         gene.h_clear()
 
     def process_time(self, ch):
         return self.all_op_options[ch[0]][ch[1]][ch[2]]
 
+    def encode(self, gene):
+        enc = ['' for _ in range(self.machine_num)]
+        for ch in gene.gene:
+            enc[ch[2]] = enc[ch[2]] + str(ch[0]) + str(ch[1])
+        return ''.join(enc)
+
     def stop_critetion(self):
         raise "not yet"
 
 
 def main():
+    args = get_args()
     population_num = 100
     child_num = 200
-    generation_num = 100
-    env = GA_FJSP(population_num, child_num)
+    generation_num = 2000
+    env = GA_FJSP(args, args.population_num, args.child_num)
 
     with open('test.txt', 'a') as out:
-        out.write('population_num : {} \t child_num : {}\t generation_num : {}\n'.format(population_num, child_num, generation_num))
+        out.write('population_num : {} \t child_num : {}\t generation_num : {}\n'.format(args.population_num, args.child_num, args.generation_num))
 
-    # file_dir = './datasets/FJSP/Brandimarte_Data'
-    file_dir = './datasets/FJSP/Hurink_Data/Text/vdata'
-
-    for ins in os.listdir(file_dir):
+    for ins in os.listdir(args.file_dir):
         env.load_instance(os.path.join(file_dir, ins))
         env.initial_population()
+
+        st_time = time.time()
+        best = 1e6
         for _ in range(generation_num):
             env.gen()
-            print('{} \t currently best {}'.format(ins, env.populations[0].fit_value))
-            print([gene.fit_value for gene in env.populations])
+            if env.populations[0].fit_value < best:
+                ed_time = time.time()
+                best = env.populations[0].fit_value
+            print('{} {} \t currently best {}'.format(ins, _, env.populations[0].fit_value))
+            # print([gene.fit_value for gene in env.populations])
+        print('{} \t best {}'.format(ins, env.populations[0].fit_value))
         with open('test.txt', 'a') as out:
-            out.write('{} \t currently best {}\n'.format(ins, env.populations[0].fit_value))
+            out.write('{} \t best {} \t time {}\n'.format(ins, env.populations[0].fit_value, ed_time - st_time))
 
 
 if __name__ == '__main__':
