@@ -5,6 +5,7 @@ from params import get_args
 import time
 from utils import *
 import functools
+import json
 
 MAX = float(1e6)
 
@@ -69,8 +70,8 @@ class GA_FJSP:
 
         # for _ in range(self.gen_child_num):
         while len(children) < self.gen_child_num:
-            choice = np.random.choice(index, size=2, replace=False, p=prob)
 
+            choice = np.random.choice(index, size=2, replace=False, p=prob)
             child1, child2 = self.crossover(self.populations[choice[0]], self.populations[choice[1]])
 
             if random.random() < self.args.mutation_rate:
@@ -209,12 +210,14 @@ def main():
     child_num = 200
     generation_num = 2000
     env = GA_FJSP(args, args.population_num, args.child_num)
+    os.makedirs('./test', exist_ok=True)
 
-    with open('test.txt', 'a') as out:
-        out.write('population_num : {} \t child_num : {}\t generation_num : {}\n'.format(args.population_num, args.child_num, args.generation_num))
+    with open('./test/{}.txt'.format(args.date), 'a') as out:
+        json.dump(vars(args), out, indent=8)
+        out.write('\npopulation_num : {} \t child_num : {}\t generation_num : {}\n'.format(args.population_num, args.child_num, args.generation_num))
 
     for ins in os.listdir(args.file_dir):
-        env.load_instance(os.path.join(file_dir, ins))
+        env.load_instance(os.path.join(args.file_dir, ins))
         env.initial_population()
 
         st_time = time.time()
@@ -227,7 +230,7 @@ def main():
             print('{} {} \t currently best {}'.format(ins, _, env.populations[0].fit_value))
             # print([gene.fit_value for gene in env.populations])
         print('{} \t best {}'.format(ins, env.populations[0].fit_value))
-        with open('test.txt', 'a') as out:
+        with open('./test/{}.txt'.format(args.date), 'a') as out:
             out.write('{} \t best {} \t time {}\n'.format(ins, env.populations[0].fit_value, ed_time - st_time))
 
 
