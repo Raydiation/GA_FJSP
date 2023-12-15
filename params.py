@@ -6,7 +6,10 @@ def get_args():
     parser.add_argument('--child_num', type=int, default=200)
     parser.add_argument('--generation_num', type=int, default=2000)
     parser.add_argument('--mutation_rate', type=float, default=0.25)
-    parser.add_argument('--tabu_num', type=float, default=20000) # 0 -> not using tabu search
+    parser.add_argument('--crossover_rate', type=float, default=0.75)
+
+    parser.add_argument('--use_tabu', type=bool, default=False)
+    parser.add_argument('--tabu_num', type=int, default=20000) # 0 -> not using tabu search
     
     parser.add_argument('--file_dir', type=str, default='./datasets/FJSP/Brandimarte_Data')
     # file dir options

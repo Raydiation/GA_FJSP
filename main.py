@@ -63,16 +63,20 @@ class GA_FJSP:
     def gen(self):
 
         index = np.array([i for i in range(self.population_num)])
+        # score = np.array([gene.fit_value for gene in self.populations])
+        # prob = np.max(score) + 1 - score
         prob = np.array([1 / gene.fit_value for gene in self.populations])
         prob = prob / sum(prob)
 
         children = []
 
-        # for _ in range(self.gen_child_num):
         while len(children) < self.gen_child_num:
 
             choice = np.random.choice(index, size=2, replace=False, p=prob)
-            child1, child2 = self.crossover(self.populations[choice[0]], self.populations[choice[1]])
+            if random.random() < self.args.crossover_rate:
+                child1, child2 = self.crossover(self.populations[choice[0]], self.populations[choice[1]])
+            else:
+                child1, child2 = GENE(self.populations[choice[0]].gene), GENE(self.populations[choice[1]].gene)
 
             if random.random() < self.args.mutation_rate:
                 self.fitness_evaluation(child1)
@@ -80,29 +84,36 @@ class GA_FJSP:
             if random.random() < self.args.mutation_rate:
                 self.fitness_evaluation(child2)
                 self.mutation(child2)
-
-            encode1 = self.encode(child1)
-            encode2 = self.encode(child2)
-
-            if encode1 not in self.tabu_history:
-                self.tabu_history.append(encode1)
+            
+            if self.args.use_tabu == False:
                 self.fitness_evaluation(child1)
                 children.append(child1)
-
-            if encode2 not in self.tabu_history:
-                self.tabu_history.append(encode2)
                 self.fitness_evaluation(child2)
                 children.append(child2)
+
+            else:
+                encode1 = self.encode(child1)
+                encode2 = self.encode(child2)
+
+                if encode1 not in self.tabu_history:
+                    self.tabu_history.append(encode1)
+                    self.fitness_evaluation(child1)
+                    children.append(child1)
+
+                if encode2 not in self.tabu_history:
+                    self.tabu_history.append(encode2)
+                    self.fitness_evaluation(child2)
+                    children.append(child2)
 
         # selection
 
         # self.populations.extend(children)
-        children.append(self.populations[0])
         self.populations = children 
 
         self.populations.sort(key=functools.cmp_to_key(cmp))
         del self.populations[self.population_num:]
-        del self.tabu_history[:max(0, len(self.tabu_history) - self.tabu_num)]
+        if self.args.use_tabu:
+            del self.tabu_history[:max(0, len(self.tabu_history) - self.tabu_num)]
 
     def fitness_evaluation(self, gene):
         # make sure the process satisfy the job precedent constrain
@@ -138,7 +149,6 @@ class GA_FJSP:
         job_current_op_1 = [0] * self.job_num
         job_current_op_2 = [0] * self.job_num
 
-        #
         for i in range(cross_point):
             child1.gene.append(gene1.gene[i])
             child2.gene.append(gene2.gene[i])
@@ -175,8 +185,11 @@ class GA_FJSP:
         critical_path.reverse()
 
         # mutation (change the selected machine)
-        rng = random.randint(0, len(critical_path) - 1)
-        new_machine = random.choice(np.where(np.array(self.all_op_options[gene.gene[critical_path[rng]][0]][gene.gene[critical_path[rng]][1]]) > 0)[0])
+        for _ in range(100): # tolerance
+            rng = random.randint(0, len(critical_path) - 1)
+            new_machine = random.choice(np.where(np.array(self.all_op_options[gene.gene[critical_path[rng]][0]][gene.gene[critical_path[rng]][1]]) > 0)[0])
+            if new_machine != gene.gene[critical_path[rng]][2]:
+                break        
         new_ch = (gene.gene[critical_path[rng]][0], gene.gene[critical_path[rng]][1], new_machine) # an new chromosome
         gene.gene.pop(critical_path[rng])
         if new_ch[1] == 0: # op 0 of job_(new_ch[0])
@@ -203,18 +216,17 @@ class GA_FJSP:
     def stop_critetion(self):
         raise "not yet"
 
-
 def main():
     args = get_args()
     population_num = 100
     child_num = 200
-    generation_num = 2000
+    generation_num = 1000
     env = GA_FJSP(args, args.population_num, args.child_num)
-    os.makedirs('./test', exist_ok=True)
+    os.makedirs('./test_result', exist_ok=True)
 
-    with open('./test/{}.txt'.format(args.date), 'a') as out:
+    with open('./test_result/{}.txt'.format(args.date), 'a') as out:
         json.dump(vars(args), out, indent=8)
-        out.write('\npopulation_num : {} \t child_num : {}\t generation_num : {}\n'.format(args.population_num, args.child_num, args.generation_num))
+        out.write('\n')
 
     for ins in os.listdir(args.file_dir):
         env.load_instance(os.path.join(args.file_dir, ins))
@@ -227,11 +239,13 @@ def main():
             if env.populations[0].fit_value < best:
                 ed_time = time.time()
                 best = env.populations[0].fit_value
-            print('{} {} \t currently best {}'.format(ins, _, env.populations[0].fit_value))
+                print('{} {} \t currently best : {} \t time : {}'.format(ins, _, env.populations[0].fit_value, ed_time - st_time))
+                with open('./test_result/{}.txt'.format(args.date), 'a') as out:
+                    out.write('{} \t currently best : {} \t time : {}\n'.format(ins, env.populations[0].fit_value, ed_time - st_time))
             # print([gene.fit_value for gene in env.populations])
         print('{} \t best {}'.format(ins, env.populations[0].fit_value))
-        with open('./test/{}.txt'.format(args.date), 'a') as out:
-            out.write('{} \t best {} \t time {}\n'.format(ins, env.populations[0].fit_value, ed_time - st_time))
+        # with open('./test_result/{}.txt'.format(args.date), 'a') as out:
+        #     out.write('{} \t best {} \t time {}\n'.format(ins, env.populations[0].fit_value, ed_time - st_time))
 
 
 if __name__ == '__main__':
